@@ -79,19 +79,20 @@ const App: Component = () => {
   });
 
   createEffect(() => {
+    const detectorReady = objectDetector.state === "ready";
     const videoReady =
       !!video && video.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA;
 
-    if (!objectDetector() || !videoReady) {
+    if (!detectorReady || !videoReady) {
       console.count("#count #frame bail");
       return;
     }
 
     const loop = (_currentFrameTimeMs: number) => {
-      const detector = objectDetector();
+      const detectorReady = objectDetector.state === "ready";
       const videoReady =
         !!video && video.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA;
-      if (!detector || !videoReady) {
+      if (!detectorReady || !videoReady) {
         console.count("#count #frame end");
         return;
       }
@@ -105,7 +106,7 @@ const App: Component = () => {
       }
 
       lastVideoTime = video.currentTime;
-      const results = detector.detectForVideo(video, startTimeMs);
+      const results = objectDetector().detectForVideo(video, startTimeMs);
       wrapper.textContent = "";
       for (const detection of results.detections) {
         const category = detection.categories[0];
@@ -116,14 +117,18 @@ const App: Component = () => {
         // A `div` element for bounding box.
         const box = document.createElement("div");
 
+        // video 640x480
+        const widthRatio = video.clientWidth / video.videoWidth;
+        const heightRatio = video.clientHeight / video.videoHeight;
+
         box.style.position = "absolute";
         box.style.border = "2px solid red";
-        // Notice how we are using the calculated ratios to preserve
-        // the sizing and coordinate of the detection.
-        box.style.left = `${detection.boundingBox.originX}px`;
-        box.style.top = `${detection.boundingBox.originY}px`;
-        box.style.height = `${detection.boundingBox.height}px`;
-        box.style.width = `${detection.boundingBox.width}px`;
+        box.style.left = `${detection.boundingBox.originX * widthRatio}px`;
+        box.style.top = `${detection.boundingBox.originY * heightRatio}px`;
+        box.style.height = `${detection.boundingBox.height * heightRatio}px`;
+        box.style.width = `${detection.boundingBox.width * widthRatio}px`;
+
+        // console.log({ vidoeOffsets: [video.offsetWidth, video.offsetHeight] });
 
         // Extract the name of the detection and score.
         const labelName = category.categoryName;
@@ -163,19 +168,17 @@ const App: Component = () => {
             <div>Failed to get camera stream</div>
           </Match>
           <Match when={!!mediaStream()}>
-            <div class="h-screen w-screen border border-white">
-              <video
-                ref={video}
-                autoplay
-                muted
-                controls={false}
-                class="h-full w-full"
-              />
-              <div
-                ref={wrapper}
-                class="absolute bottom-0 left-0 right-0 top-0"
-              />
-            </div>
+            <video
+              ref={video}
+              autoplay
+              muted
+              controls={false}
+              class="fixed bottom-0 left-0 right-0 top-0 h-screen w-screen object-cover"
+            />
+            <div
+              ref={wrapper}
+              class="fixed bottom-0 left-0 right-0 top-0 h-screen w-screen"
+            />
           </Match>
         </Switch>
       </Suspense>
