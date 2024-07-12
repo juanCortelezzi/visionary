@@ -126,6 +126,7 @@ function InnerHome() {
         muted
         controls={false}
         className="fixed bottom-0 left-0 right-0 top-0 h-screen w-screen object-cover"
+        playsInline
       />
       <div
         ref={wrapper}
