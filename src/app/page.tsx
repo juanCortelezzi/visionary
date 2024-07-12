@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useVideoStream } from "~/lib/media";
 import { useRecognizer } from "~/lib/recognizerStore";
 
@@ -13,37 +13,66 @@ export default function Home() {
 }
 
 function InnerHome() {
-  const video = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const wrapper = useRef<HTMLDivElement>(null);
   const lastVideoTime = useRef(-1);
   const animationFrameId = useRef<number | null>(null);
+  const [isVideoReady, setIsVideoReady] = useState(false);
 
   const recognizer = useRecognizer();
   const videoStreamQuery = useVideoStream();
 
   useEffect(() => {
-    if (video.current && videoStreamQuery.data) {
-      video.current.srcObject = videoStreamQuery.data.mediaStream;
+    const video = videoRef.current;
+    if (!video) {
+      return;
     }
+
+    if (videoStreamQuery.data) {
+      video.srcObject = videoStreamQuery.data.mediaStream;
+    }
+
+    const handle = () => {
+      setIsVideoReady(
+        (video.readyState ?? -1) >= HTMLMediaElement.HAVE_CURRENT_DATA,
+      );
+    };
+
+    handle();
+
+    const events: Array<keyof HTMLMediaElementEventMap> = [
+      "loadeddata",
+      "play",
+      "canplay",
+      "loadstart",
+      "loadedmetadata",
+      "loadeddata",
+      "ended",
+      "pause",
+      "stalled",
+      "suspend",
+      "waiting",
+      "abort",
+    ];
+
+    events.forEach((event) => video.addEventListener(event, handle));
+
+    return () => {
+      events.forEach((event) => video.removeEventListener(event, handle));
+    };
   }, [videoStreamQuery.data]);
 
   useEffect(() => {
-    if (
-      !recognizer ||
-      !video.current ||
-      !wrapper.current ||
-      video.current.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA
-    ) {
-      console.count("#count #frame bail");
+    if (!isVideoReady || !recognizer) {
       return;
     }
 
     const loop = (_currentFrameTimeMs: number) => {
       if (
         !recognizer ||
-        !video.current ||
+        !videoRef.current ||
         !wrapper.current ||
-        video.current.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA
+        videoRef.current.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA
       ) {
         console.count("#count #frame end");
         return;
@@ -51,15 +80,15 @@ function InnerHome() {
 
       const startTimeMs = performance.now();
 
-      if (video.current.currentTime === lastVideoTime.current) {
+      if (videoRef.current.currentTime === lastVideoTime.current) {
         console.count("#count #frame skip");
         animationFrameId.current = requestAnimationFrame(loop);
         return;
       }
 
-      lastVideoTime.current = video.current.currentTime;
+      lastVideoTime.current = videoRef.current.currentTime;
 
-      const results = recognizer.detectForVideo(video.current, startTimeMs);
+      const results = recognizer.detectForVideo(videoRef.current, startTimeMs);
       wrapper.current.textContent = "";
       for (const detection of results.detections) {
         const category = detection.categories[0];
@@ -71,9 +100,10 @@ function InnerHome() {
         const box = document.createElement("div");
 
         // video 640x480
-        const widthRatio = video.current.clientWidth / video.current.videoWidth;
+        const widthRatio =
+          videoRef.current.clientWidth / videoRef.current.videoWidth;
         const heightRatio =
-          video.current.clientHeight / video.current.videoHeight;
+          videoRef.current.clientHeight / videoRef.current.videoHeight;
 
         box.style.position = "absolute";
         box.style.border = "2px solid red";
@@ -103,7 +133,6 @@ function InnerHome() {
       animationFrameId.current = requestAnimationFrame(loop);
     };
 
-    console.count("#count #frame init");
     animationFrameId.current = requestAnimationFrame(loop);
 
     return () => {
@@ -112,16 +141,18 @@ function InnerHome() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [recognizer]);
+  }, [isVideoReady, recognizer]);
 
   if (!videoStreamQuery.data) {
-    return <div>Loading Camera...</div>;
+    return (
+      <div className="text-lg font-bold text-white">Loading Camera...</div>
+    );
   }
 
   return (
     <>
       <video
-        ref={video}
+        ref={videoRef}
         autoPlay
         muted
         controls={false}
